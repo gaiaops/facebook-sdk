@@ -1,3 +1,5 @@
+For our official documentation go here: http://www.kontagent.com/docs/api-libraries/facebook-30-sdk-library/
+
 Overview
 -----------------
 
