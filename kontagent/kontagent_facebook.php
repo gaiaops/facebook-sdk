@@ -434,9 +434,7 @@ class KontagentFacebook extends Facebook
 		}
 		
 		// remove trailing ampersand
-		$dataString = substr($dataString, 0, -1);
-
-		return $dataString;
+		return $this->removeTrailingAmpersand($dataString);
 	}
 			
 	// Strips the Kontagent data and returns a string containing only the original data.
@@ -474,9 +472,7 @@ class KontagentFacebook extends Facebook
 		}
 		
 		// remove trailing ampersand
-		$url = substr($url, 0, -1);
-		
-		return $url;
+		return $this->removeTrailingAmpersand($url);
 	}
 	
 	// Cleans a given URL of KT tracking parameters.
@@ -532,6 +528,15 @@ class KontagentFacebook extends Facebook
 		}
 		
 		return $ktUrlVars;
+	}
+
+	private function removeTrailingAmpersand($string)
+	{
+		if (substr($string, -1) == '&') {
+			return substr($string, 0, -1);
+		} else {
+			return $string;
+		}
 	}
 }
 

@@ -40,32 +40,7 @@ FB.login = function (cb, opts) {
 				"shortUniqueTrackingTag": (KT_GET["kt_su"]) ? KT_GET["kt_su"] : null
 			});
 			
-			// Track User Information
-			FB.api('/me', function(apiMeResponse) {
-				FB.api('/me/friends', function(apiFriendsResponse) {
-					var gender, birthYear, friendCount;
-				
-					if (apiMeResponse.gender) {
-						gender = apiMeResponse.gender.substring(0,1);
-					}
-					if (apiMeResponse.birthday) {
-						var birthdayPieces = apiMeResponse.birthday.split('/');
-					
-						if (birthdayPieces.length == 3) {
-							birthYear = birthdayPieces[2];
-						}
-					}
-					if (apiFriendsResponse.data) {
-						friendCount = apiFriendsResponse.data.length;
-					}
-					
-					FB._ktApi.trackUserInformation(loginResponse.authResponse.userID, {
-						"gender": gender,
-						"birthYear": birthYear,
-						"friendCount": friendCount
-					});					
-				});
-			});
+			FB._trackUserInformation();
 		}
 		
 		// Fire off the original callback
@@ -164,32 +139,7 @@ FB._trackLanding = function()
 					"shortUniqueTrackingTag": (KT_GET['kt_su']) ? KT_GET['kt_su'] : null
 				});
 				
-				// Track the User Information
-				BASE_FB.api('/me', function(apiMeResponse) {
-					BASE_FB.api('/me/friends', function(apiFriendsResponse) {
-						var gender, birthYear, friendCount;
-
-						if (apiMeResponse.gender) {
-							gender = apiMeResponse.gender.substring(0,1);
-						}
-						if (apiMeResponse.birthday) {
-							var birthdayPieces = apiMeResponse.birthday.split('/');
-						
-							if (birthdayPieces.length == 3) {
-								birthYear = birthdayPieces[2];
-							}
-						}
-						if (apiFriendsResponse.data) {
-							friendCount = apiFriendsResponse.data.length;
-						}
-						
-						FB._ktApi.trackUserInformation(authResponse.userID, {
-							"gender": gender,
-							"birthYear": birthYear,
-							"friendCount": friendCount
-						});					
-					});
-				});
+				FB._trackUserInformation();
 			}
 			
 			if (KT_GET['kt_track_ins'] && FB._isArray(KT_GET['request_ids'])) {
@@ -244,6 +194,36 @@ FB._trackLanding = function()
 	}
 }
 
+FB._trackUserInformation = function()
+{
+	// Track the User Information
+	BASE_FB.api('/me', function(apiMeResponse) {
+		BASE_FB.api('/me/friends', function(apiFriendsResponse) {
+			var gender, birthYear, friendCount;
+
+			if (apiMeResponse.gender) {
+				gender = apiMeResponse.gender.substring(0,1);
+			}
+			if (apiMeResponse.birthday) {
+				var birthdayPieces = apiMeResponse.birthday.split('/');
+			
+				if (birthdayPieces.length == 3) {
+					birthYear = birthdayPieces[2];
+				}
+			}
+			if (apiFriendsResponse.data) {
+				friendCount = apiFriendsResponse.data.length;
+			}
+			
+			FB._ktApi.trackUserInformation(apiMeResponse.id, {
+				"gender": gender,
+				"birthYear": birthYear,
+				"friendCount": friendCount
+			});
+		});
+	});
+}
+
 // Returns whether the current URL is HTTPS
 FB._isHttps = function()
 {
@@ -277,11 +257,10 @@ FB._appendKtVarsToDataField = function(dataString, vars)
 		}
 	}
 	
-	// remove trailing ampersand
-	return dataString.slice(0, -1);
+	return FB._removeTrailingAmpersand(dataString);
 }
 
-// Appends variables to a given URL. "vars" should be an object
+// Appends variables to a given URL. "vars" dataStringshould be an object
 // in the form: {"var_name": var_value, ...}
 FB._appendKtVarsToUrl = function(url, vars) 
 {
@@ -297,8 +276,16 @@ FB._appendKtVarsToUrl = function(url, vars)
 		}
 	}
 	
-	// remove trailing ampersand
-	return url.slice(0, -1);
+	return FB._removeTrailingAmpersand(url);
+}
+
+FB._removeTrailingAmpersand(string) 
+{
+	if (string.charAt(string.length-1) == '&') {
+		return string.slice(0, -1);
+	} else {
+		return string;
+	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -907,6 +894,7 @@ function KtValidator() {
 
 /*
 * Validates a parameter of a given message type.
+* IMPORTANT: When evaluating the return, use a strict-type comparison: if(response === true) {}
 *
 * @param {string} messageType The message type that the param belongs to (ex: ins, apa, etc.)
 * @param {string} paramName The name of the parameter (ex: s, su, u, etc.)
@@ -1041,6 +1029,7 @@ KtValidator._validateN = function(messageType, paramName, paramValue) {
 		return true;
 	}
 }
+
 
 KtValidator._validateR = function(messageType, paramName, paramValue) {
 	// Sending messages include multiple recipients (comma separated) and
