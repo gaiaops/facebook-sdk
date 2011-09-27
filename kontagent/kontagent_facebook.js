@@ -279,7 +279,7 @@ FB._appendKtVarsToUrl = function(url, vars)
 	return FB._removeTrailingAmpersand(url);
 }
 
-FB._removeTrailingAmpersand(string) 
+FB._removeTrailingAmpersand = function(string) 
 {
 	if (string.charAt(string.length-1) == '&') {
 		return string.slice(0, -1);
