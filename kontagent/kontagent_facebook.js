@@ -50,7 +50,7 @@ FB.login = function (cb, opts) {
         spruceUrl += "?spruce_adid=" + KT_GET["spruce_adid"];
         spruceUrl += "&spruce_sid=" + FB._ktApi.genShortUniqueTrackingTag();
 
-        FB._ktApi.sendHttpRequestViaImgTag(spruceUrl);
+        FB._ktApi._sendHttpRequestViaImgTag(spruceUrl);
       }			
 		}
 		
@@ -159,7 +159,7 @@ FB._trackLanding = function()
           spruceUrl += "?spruce_adid=" + KT_GET["spruce_adid"];
           spruceUrl += "&spruce_sid=" + FB._ktApi.genShortUniqueTrackingTag();
 
-          FB._ktApi.sendHttpRequestViaImgTag(spruceUrl);
+          FB._ktApi._sendHttpRequestViaImgTag(spruceUrl);
         }				
 			}
 			
