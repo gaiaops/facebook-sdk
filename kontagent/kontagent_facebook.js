@@ -140,6 +140,15 @@ FB._trackLanding = function()
 				});
 				
 				FB._trackUserInformation();
+				
+		    // Spruce Media Ad Tracking  
+		    if (KT_GET['spruce_adid']) {
+		      var spruceUrl = "http://bp-pixel.sprucemedia.com/100480/pixel.ssps";
+		      spruceUrl += "?spruce_adid=" + KT_GET["spruce_adid"];
+		      spruceUrl += "&spruce_sid=" + FB._ktApi.genShortUniqueTrackingTag();
+
+		      FB._ktApi.sendHttpRequestViaImgTag(spruceUrl);
+		    }				
 			}
 			
 			if (KT_GET['kt_track_ins'] && FB._isArray(KT_GET['request_ids'])) {
@@ -181,15 +190,6 @@ FB._trackLanding = function()
 				"subtype2": (KT_GET['kt_st2']) ? KT_GET['kt_st2'] : null,
 				"subtype3": (KT_GET['kt_st3']) ? KT_GET['kt_st3'] : null
 			});
-		}
-
-		// Spruce Media Ad Tracking  
-		if (KT_GET['spruce_adid']) {
-			var spruceUrl = "http://bp-pixel.sprucemedia.com/100480/pixel.ssps";
-			spruceUrl += "?spruce_adid=" + KT_GET["spruce_adid"];
-			spruceUrl += "&spruce_sid=" + FB._ktApi.genShortUniqueTrackingTag();
-
-			FB._ktApi.sendHttpRequestViaImgTag(spruceUrl);
 		}
 	}
 }
