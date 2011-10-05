@@ -43,15 +43,7 @@ FB.login = function (cb, opts) {
 			});
 			
 			FB._trackUserInformation();
-			
-      // Spruce Media Ad Tracking
-      if (KT_GET['spruce_adid']) {
-        var spruceUrl = "http://bp-pixel.sprucemedia.com/100480/pixel.ssps";
-        spruceUrl += "?spruce_adid=" + KT_GET["spruce_adid"];
-        spruceUrl += "&spruce_sid=" + FB._ktApi.genShortUniqueTrackingTag();
-
-        FB._ktApi._sendHttpRequestViaImgTag(spruceUrl);
-      }			
+			FB._trackSpruce();
 		}
 		
 		// Fire off the original callback
@@ -152,15 +144,7 @@ FB._trackLanding = function()
 				});
 				
 				FB._trackUserInformation();
-				
-        // Spruce Media Ad Tracking
-        if (KT_GET['spruce_adid']) {
-          var spruceUrl = "http://bp-pixel.sprucemedia.com/100480/pixel.ssps";
-          spruceUrl += "?spruce_adid=" + KT_GET["spruce_adid"];
-          spruceUrl += "&spruce_sid=" + FB._ktApi.genShortUniqueTrackingTag();
-
-          FB._ktApi._sendHttpRequestViaImgTag(spruceUrl);
-        }				
+				FB._trackSpruce();				
 			}
 			
 			if (KT_GET['kt_track_ins'] && FB._isArray(KT_GET['request_ids'])) {
@@ -245,6 +229,11 @@ FB._isHttps = function()
 	} else {
 		return false;
 	}
+}
+
+FB._adTrack = function() {
+  // Spruce Media Ad Tracking
+  KT_GET['spruce_adid'] && FB._ktApi._sendHttpRequestViaImgTag(window.location.protocol + "//bp-pixel.sprucemedia.com/100480/pixel.ssps?spruce_adid=" + KT_GET["spruce_adid"] + "&spruce_sid=" + FB._ktApi.genShortUniqueTrackingTag());
 }
 
 // Returns true of the variable is an array, false otherwise.
