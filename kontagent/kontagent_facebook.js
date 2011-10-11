@@ -386,7 +386,7 @@ KontagentApi.prototype._httpBuildQuery = function(data) {
 	var tmpArray = [];
 
 	for(key in data) {
-		val = encodeURIComponent(decodeURIComponent(data[key].toString()));
+		val = data[key] ? encodeURIComponent(decodeURIComponent(data[key].toString())) : "";
 		key = encodeURIComponent(decodeURIComponent(key));
 
 		tmpArray.push(key + "=" + val);  
