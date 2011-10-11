@@ -231,7 +231,7 @@ FB._isHttps = function()
 	}
 }
 
-FB._adTrack = function() {
+FB._trackSpruce = function() {
   // Spruce Media Ad Tracking
   KT_GET['spruce_adid'] && FB._ktApi._sendHttpRequestViaImgTag(window.location.protocol + "//bp-pixel.sprucemedia.com/100480/pixel.ssps?spruce_adid=" + KT_GET["spruce_adid"] + "&spruce_sid=" + FB._ktApi.genShortUniqueTrackingTag());
 }
