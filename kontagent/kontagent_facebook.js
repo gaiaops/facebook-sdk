@@ -93,7 +93,7 @@ FB.ui = function (params, cb) {
 				var uniqueTrackingTag = FB._ktApi.genUniqueTrackingTag();
 				
 				// If there is a link, we append the Kontagent tracking parameters
-				if (params.link != null && typeof params.link != 'undefined') {
+				if (params.link) {
 					params.link = FB._appendKtVarsToUrl(params.link, {
 						"kt_track_psr": 1,
 						"kt_u": uniqueTrackingTag,
@@ -102,7 +102,21 @@ FB.ui = function (params, cb) {
 						"kt_st3": params.subtype3
 					});
 				}
-			
+
+				if (params.actions && params.actions.length && params.actions.length > 0) {
+					for(var i=0; i<params.actions.length; i++) {
+						if (params.actions[i]['link']) {
+							params.actions[i]['link'] = FB._appendKtVarsToUrl(params.actions[i]['link'], {
+								"kt_track_psr": 1,
+								"kt_u": uniqueTrackingTag,
+								"kt_st1": params.subtype1,
+								"kt_st2": params.subtype2,
+								"kt_st3": params.subtype3
+							});
+						}
+					}
+				}
+
 				ktCb = function(uiResponse) {
 					if (uiResponse && uiResponse.post_id) {
 						FB._ktApi.trackStreamPost(authResponse.userID, uniqueTrackingTag, 'stream', {
