@@ -61,8 +61,7 @@ FB.ui = function (params, cb) {
 	// Make sure the user is logged in and authenticated
 	if (authResponse && authResponse.userID) {	
 		// Implement the appropriate callback depending on what method they are
-    // trying
-		// to call.
+    		// trying to call.
 		switch(params.method.toLowerCase()) {
 			case 'apprequests':
 				var uniqueTrackingTag = FB._ktApi.genUniqueTrackingTag();
@@ -77,12 +76,24 @@ FB.ui = function (params, cb) {
 				});
 				
 				ktCb = function(uiResponse) {
-					if (uiResponse && uiResponse.request_ids && uiResponse.request_ids.length > 0) {
-						FB._ktApi.trackInviteSent(authResponse.userID, uiResponse.request_ids.join(','), uniqueTrackingTag, {
-							"subtype1": params.subtype1,
-							"subtype2": params.subtype2,
-							"subtype3": params.subtype3
-						});
+					if (uiResponse) {
+						if (uiResponse.request_ids && uiResponse.request_ids.length > 0) {
+							// Non-efficient requests, we need to make an extra call to retrieve the recipient UIDs
+							FB._getRecipientUserIdsFromRequestIds(uiResponse.request_ids.join(','), function(response) {
+								FB._ktApi.trackInviteSent(authResponse.userID, response.recipientUserIds, uniqueTrackingTag, {
+									"subtype1": params.subtype1,
+									"subtype2": params.subtype2,
+									"subtype3": params.subtype3
+								});
+							});
+						} else if (uiResponse.request && uiResponse.to && uiResponse.to.length > 0) {
+							// "Request 2.0 Efficient" mode. We have access to the UIDs
+							FB._ktApi.trackInviteSent(authResponse.userID, uiResponse.to.join(','), uniqueTrackingTag, {
+								"subtype1": params.subtype1,
+								"subtype2": params.subtype2,
+								"subtype3": params.subtype3
+							});
+						}
 					}
 					
 					cb(uiResponse);
@@ -161,17 +172,34 @@ FB._trackLanding = function()
 				FB._trackSpruce();				
 			}
 			
-			if (KT_GET['kt_track_ins'] && FB._isArray(KT_GET['request_ids'])) {
-				FB._ktApi.trackInviteSent(
-					authResponse.userID, 
-					KT_GET['request_ids'].join(','),
-					KT_GET['kt_u'],
-					{
-						"subtype1": (KT_GET['kt_st1']) ? KT_GET['kt_st1'] : null,
-						"subtype2": (KT_GET['kt_st2']) ? KT_GET['kt_st2'] : null,
-						"subtype3": (KT_GET['kt_st3']) ? KT_GET['kt_st3'] : null
-					}
-				);
+			if (KT_GET['kt_track_ins']) {
+				if (KT_GET['request_ids'] && FB._isArray(KT_GET['request_ids'])) {
+					// Non-efficient Requests, we need to make an extra call to get the uids
+					FB._getRecipientUserIdsFromRequestIds(KT_GET['request_ids'].join(','), function(response) {
+						FB._ktApi.trackInviteSent(
+							authResponse.userID, 
+							response.recipientUserIds,
+							KT_GET['kt_u'],
+							{
+								"subtype1": (KT_GET['kt_st1']) ? KT_GET['kt_st1'] : null,
+								"subtype2": (KT_GET['kt_st2']) ? KT_GET['kt_st2'] : null,
+								"subtype3": (KT_GET['kt_st3']) ? KT_GET['kt_st3'] : null
+							}
+						);
+					});
+				} else if (KT_GET['request'] && KT_GET['to'] && FB._isArray(GET['to'])) {
+					// Request 2.0 Efficient mode, we have direct access to recipeint uids
+					FB._ktApi.trackInviteSent(
+						authResponse.userID, 
+						KT_GET['to'].join(','),
+						KT_GET['kt_u'],
+						{
+							"subtype1": (KT_GET['kt_st1']) ? KT_GET['kt_st1'] : null,
+							"subtype2": (KT_GET['kt_st2']) ? KT_GET['kt_st2'] : null,
+							"subtype3": (KT_GET['kt_st3']) ? KT_GET['kt_st3'] : null
+						}
+					);
+				}
 			}
 		
 			if (KT_GET['kt_track_pst'] && KT_GET['post_id']) {
@@ -194,7 +222,7 @@ FB._trackLanding = function()
 		
 		if (KT_GET['kt_type']) {
 			// The shortUniqueTrackingTag is generated on the serverside landing
-      // method.
+			// method.
 			FB._ktApi.trackThirdPartyCommClick(KT_GET['kt_type'], KT_GET['kt_su'], {
 				"userId": (authResponse && authResponse.userID) ? authResponse.userID : null,
 				"subtype1": (KT_GET['kt_st1']) ? KT_GET['kt_st1'] : null,
@@ -202,62 +230,6 @@ FB._trackLanding = function()
 				"subtype3": (KT_GET['kt_st3']) ? KT_GET['kt_st3'] : null
 			});
 		}
-	}
-}
-
-FB._trackUserInformation = function()
-{
-	// Track the User Information
-	BASE_FB.api('/me', function(apiMeResponse) {
-		BASE_FB.api('/me/friends', function(apiFriendsResponse) {
-			var gender, birthYear, friendCount;
-
-			if (apiMeResponse.gender) {
-				gender = apiMeResponse.gender.substring(0,1);
-			}
-			if (apiMeResponse.birthday) {
-				var birthdayPieces = apiMeResponse.birthday.split('/');
-			
-				if (birthdayPieces.length == 3) {
-					birthYear = birthdayPieces[2];
-				}
-			}
-			if (apiFriendsResponse.data) {
-				friendCount = apiFriendsResponse.data.length;
-			}
-			
-			FB._ktApi.trackUserInformation(apiMeResponse.id, {
-				"gender": gender,
-				"birthYear": birthYear,
-				"friendCount": friendCount
-			});
-		});
-	});
-}
-
-// Returns whether the current URL is HTTPS
-FB._isHttps = function()
-{
-	if (window.location.protocol == 'https:') {
-		return true;
-	} else {
-		return false;
-	}
-}
-
-FB._trackSpruce = function() {
-  // Spruce Media Ad Tracking
-  KT_GET['spruce_adid'] && FB._ktApi._sendHttpRequestViaImgTag(window.location.protocol + "//bp-pixel.sprucemedia.com/100480/pixel.ssps?spruce_adid=" + KT_GET["spruce_adid"] + "&spruce_sid=" + FB._ktApi.genShortUniqueTrackingTag());
-}
-
-// Returns true of the variable is an array, false otherwise.
-FB._isArray = function(variable) {
-	if (!KT_GET['request_ids']) {
-		return false;
-	} else if (KT_GET['request_ids'] instanceof Array) {
-		return true;
-	} else {
-		return false;
 	}
 }
 
@@ -295,6 +267,78 @@ FB._appendKtVarsToUrl = function(url, vars)
 	return FB._removeTrailingAmpersand(url);
 }
 
+FB._trackUserInformation = function()
+{
+	// Track the User Information
+	BASE_FB.api('/me', function(apiMeResponse) {
+		BASE_FB.api('/me/friends', function(apiFriendsResponse) {
+			var gender, birthYear, friendCount;
+
+			if (apiMeResponse.gender) {
+				gender = apiMeResponse.gender.substring(0,1);
+			}
+			if (apiMeResponse.birthday) {
+				var birthdayPieces = apiMeResponse.birthday.split('/');
+			
+				if (birthdayPieces.length == 3) {
+					birthYear = birthdayPieces[2];
+				}
+			}
+			if (apiFriendsResponse.data) {
+				friendCount = apiFriendsResponse.data.length;
+			}
+			
+			FB._ktApi.trackUserInformation(apiMeResponse.id, {
+				"gender": gender,
+				"birthYear": birthYear,
+				"friendCount": friendCount
+			});
+		});
+	});
+}
+
+FB._trackSpruce = function() {
+  // Spruce Media Ad Tracking
+  KT_GET['spruce_adid'] && FB._ktApi._sendHttpRequestViaImgTag(window.location.protocol + "//bp-pixel.sprucemedia.com/100480/pixel.ssps?spruce_adid=" + KT_GET["spruce_adid"] + "&spruce_sid=" + FB._ktApi.genShortUniqueTrackingTag());
+}
+
+// Given a comma-separated list of requestIds will return the recipient userIds (comma-separated)
+FB._getRecipientUserIdsFromRequestIds = function(requestIds, callback)
+{
+	BASE_FB.api('', {"ids": requestIds}, function(response) {
+		var recipientUserIds = '';
+	
+		for(var key in response) {
+			recipientUserIds += response[key].to.id + ',';
+		}
+		
+		recipientUserIds = FB._removeTrailingComma(recipientUserIds);
+		
+		callback({"recipientUserIds": recipientUserIds});
+	});
+}
+
+// Returns whether the current URL is HTTPS
+FB._isHttps = function()
+{
+	if (window.location.protocol == 'https:') {
+		return true;
+	} else {
+		return false;
+	}
+}
+
+// Returns true of the variable is an array, false otherwise.
+FB._isArray = function(variable) {
+	if (!KT_GET['request_ids']) {
+		return false;
+	} else if (KT_GET['request_ids'] instanceof Array) {
+		return true;
+	} else {
+		return false;
+	}
+}
+
 FB._removeTrailingAmpersand = function(string) 
 {
 	if (string.charAt(string.length-1) == '&') {
@@ -304,19 +348,27 @@ FB._removeTrailingAmpersand = function(string)
 	}
 }
 
-// //////////////////////////////////////////////////////////////////////////////
+FB._removeTrailingComma = function(string) 
+{
+	if (string.charAt(string.length-1) == ',') {
+		return string.slice(0, -1);
+	} else {
+		return string;
+	}
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 /*
- * Kontagent class constructor
- * 
- * @constructor
- * 
- * @param {string} apiKey The app's Kontagent API key @param {object}
- * [optionalParams] An object containing paramName => value @param {bool}
- * [optionalParams.useTestServer] Whether to send messages to the Kontagent Test
- * Server @param {bool} [optionalParams.validateParams] Whether to validate the
- * parameters passed into the tracking method
- */
+* Kontagent class constructor
+*
+* @constructor
+*
+* @param {string} apiKey The app's Kontagent API key
+* @param {object} [optionalParams] An object containing paramName => value
+* @param {bool} [optionalParams.useTestServer] Whether to send messages to the Kontagent Test Server
+* @param {bool} [optionalParams.validateParams] Whether to validate the parameters passed into the tracking method
+*/
 function KontagentApi(apiKey, optionalParams) {
 	this._baseApiUrl = "http://api.geo.kontagent.net/api/v1/";
 	this._baseHttpsApiUrl = "https://api.geo.kontagent.net/api/v1/";
@@ -329,37 +381,37 @@ function KontagentApi(apiKey, optionalParams) {
 }
 
 /*
- * Sends an HTTP request by creating an <img> tag given a URL.
- * 
- * @param {string} url The request URL @param {function} [successCallback] The
- * callback function to execute once message has been sent successfully
- */
+* Sends an HTTP request by creating an <img> tag given a URL.
+*
+* @param {string} url The request URL
+* @param {function} [successCallback] The callback function to execute once message has been sent successfully
+*/
 KontagentApi.prototype._sendHttpRequestViaImgTag = function(url, successCallback)
 {
 	var img = new Image();
 	
-	// The onerror callback will always be triggered because no image header is
-  // returned by our API.
+	// The onerror callback will always be triggered because no image header is returned by our API.
 	// Which is fine because the request would have still gone through.
 	if (successCallback) {
-		img.onerror = successallback;
+		img.onerror = successCallback;
 		img.onload = successCallback;
 	}
-	
+
 	img.src = url;
 }
 
 /*
- * Sends the API message by creating an <img> tag.
- * 
- * @param {string} messageType The message type to send ('apa', 'ins', etc.)
- * @param {object} params An object containing paramName => value (ex:
- * 's'=>123456789) @param {function} [successCallback] The callback function to
- * execute once message has been sent successfully @param {function(error)}
- * [validationErrorCallback] The callback function to execute on validation
- * failure
- */
-KontagentApi.prototype._sendMessageViaImgTag = function(messageType, params, successCallback, validationErrorCallback) {
+* Sends the API message by creating an <img> tag.
+*
+* @param {string} messageType The message type to send ('apa', 'ins', etc.)
+* @param {object} params An object containing paramName => value (ex: 's'=>123456789)
+* @param {function} [successCallback] The callback function to execute once message has been sent successfully
+* @param {function(error)} [validationErrorCallback] The callback function to execute on validation failure
+*/
+KontagentApi.prototype._sendMessage = function(messageType, params, successCallback, validationErrorCallback) {
+	// add a timestamp param to prevent browser caching
+	params['ts'] =  new Date().getTime();
+
 	if (this._validateParams == true) {
 		var result;
 
@@ -389,18 +441,18 @@ KontagentApi.prototype._sendMessageViaImgTag = function(messageType, params, suc
 }
 
 /*
- * Generate URL-encoded query string (same as PHP's http_build_query())
- * 
- * @param {object} data The object containing key, value data to encode
- * 
- * @return {string) A URL-encoded string
- */
+* Generate URL-encoded query string (same as PHP's http_build_query())
+*
+* @param {object} data The object containing key, value data to encode
+*
+* @return {string) A URL-encoded string
+*/
 KontagentApi.prototype._httpBuildQuery = function(data) {
 	var query, key, val;
 	var tmpArray = [];
 
 	for(key in data) {
-		val = data[key] ? encodeURIComponent(decodeURIComponent(data[key].toString())) : "";
+		val = encodeURIComponent(decodeURIComponent(data[key].toString()));
 		key = encodeURIComponent(decodeURIComponent(key));
 
 		tmpArray.push(key + "=" + val);  
@@ -410,19 +462,19 @@ KontagentApi.prototype._httpBuildQuery = function(data) {
 }
 
 /*
- * Returns random 4-character hex
- * 
- * @return {string} Random 4-character hex value
- */
+* Returns random 4-character hex
+*
+* @return {string} Random 4-character hex value
+*/
 KontagentApi.prototype._s4 = function() {
 	return (((1+Math.random())*0x10000)|0).toString(16).substring(1);
 }
 
 /*
- * Generates a unique tracking tag.
- * 
- * @return {string} The unique tracking tag
- */
+* Generates a unique tracking tag.
+*
+*  @return {string} The unique tracking tag
+*/
 KontagentApi.prototype.genUniqueTrackingTag = function() {
 	var uniqueTrackingTag = "";
 	
@@ -434,10 +486,10 @@ KontagentApi.prototype.genUniqueTrackingTag = function() {
 }
 
 /*
- * Generates a short unique tracking tag.
- * 
- * @return {string} The short unique tracking tag
- */
+* Generates a short unique tracking tag.
+*
+*  @return {string} The short unique tracking tag
+*/
 KontagentApi.prototype.genShortUniqueTrackingTag = function() {
 	var shortUniqueTrackingTag = "";
 	
@@ -450,21 +502,20 @@ KontagentApi.prototype.genShortUniqueTrackingTag = function() {
 }
 
 /*
- * Sends an Invite Sent message to Kontagent.
- * 
- * @param {string} userId The UID of the sending user @param {string}
- * recipientUserIds A comma-separated list of the recipient UIDs @param {string}
- * uniqueTrackingTag 32-digit hex string used to match
- * InviteSent->InviteResponse->ApplicationAdded messages. See the
- * genUniqueTrackingTag() helper method. @param {object} [optionalParams] An
- * object containing paramName => value @param {string}
- * [optionalParams.subtype1] Subtype1 value (max 32 chars) @param {string}
- * [optionalParams.subtype2] Subtype2 value (max 32 chars) @param {string}
- * [optionalParams.subtype3] Subtype3 value (max 32 chars) @param {function}
- * [successCallback] The callback function to execute once message has been sent
- * successfully @param {function(error)} [validationErrorCallback] The callback
- * function to execute on validation failure
- */
+* Sends an Invite Sent message to Kontagent.
+*
+* @param {string} userId The UID of the sending user
+* @param {string} recipientUserIds A comma-separated list of the recipient UIDs
+* @param {string} uniqueTrackingTag 32-digit hex string used to match 
+* 	InviteSent->InviteResponse->ApplicationAdded messages. 
+* 	See the genUniqueTrackingTag() helper method.
+* @param {object} [optionalParams] An object containing paramName => value
+* @param {string} [optionalParams.subtype1] Subtype1 value (max 32 chars)
+* @param {string} [optionalParams.subtype2] Subtype2 value (max 32 chars)
+* @param {string} [optionalParams.subtype3] Subtype3 value (max 32 chars)
+* @param {function} [successCallback] The callback function to execute once message has been sent successfully
+* @param {function(error)} [validationErrorCallback] The callback function to execute on validation failure
+*/
 KontagentApi.prototype.trackInviteSent = function(userId, recipientUserIds, uniqueTrackingTag, optionalParams, successCallback, validationErrorCallback) {
 	var apiParams = {
 		s : userId,
@@ -478,24 +529,23 @@ KontagentApi.prototype.trackInviteSent = function(userId, recipientUserIds, uniq
 		if (optionalParams.subtype3) { apiParams.st3 = optionalParams.subtype3; }
 	}
 
-	this._sendMessageViaImgTag("ins", apiParams, successCallback, validationErrorCallback);
+	this._sendMessage("ins", apiParams, successCallback, validationErrorCallback);
 }
 
 /*
- * Sends an Invite Response message to Kontagent.
- * 
- * @param {string} uniqueTrackingTag 32-digit hex string used to match
- * InviteSent->InviteResponse->ApplicationAdded messages. See the
- * genUniqueTrackingTag() helper method. @param {object} [optionalParams] An
- * object containing paramName => value @param {string}
- * [optionalParams.recipientUserId] The UID of the responding user @param
- * {string} [optionalParams.subtype1] Subtype1 value (max 32 chars) @param
- * {string} [optionalParams.subtype2] Subtype2 value (max 32 chars) @param
- * {string} [optionalParams.subtype3] Subtype3 value (max 32 chars) @param
- * {function} [successCallback] The callback function to execute once message
- * has been sent successfully @param {function(error)} [validationErrorCallback]
- * The callback function to execute on validation failure
- */
+* Sends an Invite Response message to Kontagent.
+*
+* @param {string} uniqueTrackingTag 32-digit hex string used to match 
+*	InviteSent->InviteResponse->ApplicationAdded messages. 
+*	See the genUniqueTrackingTag() helper method.
+* @param {object} [optionalParams] An object containing paramName => value
+* @param {string} [optionalParams.recipientUserId] The UID of the responding user
+* @param {string} [optionalParams.subtype1] Subtype1 value (max 32 chars)
+* @param {string} [optionalParams.subtype2] Subtype2 value (max 32 chars)
+* @param {string} [optionalParams.subtype3] Subtype3 value (max 32 chars)
+* @param {function} [successCallback] The callback function to execute once message has been sent successfully
+* @param {function(error)} [validationErrorCallback] The callback function to execute on validation failure
+*/
 KontagentApi.prototype.trackInviteResponse = function(uniqueTrackingTag, optionalParams, successCallback, validationErrorCallback) {
 	var apiParams = {
 		i : 0,
@@ -509,25 +559,24 @@ KontagentApi.prototype.trackInviteResponse = function(uniqueTrackingTag, optiona
 		if (optionalParams.subtype3) { apiParams.st3 = optionalParams.subtype3; }
 	}	
 	
-	this._sendMessageViaImgTag("inr", apiParams, successCallback, validationErrorCallback);
+	this._sendMessage("inr", apiParams, successCallback, validationErrorCallback);
 }
 
 /*
- * Sends an Notification Sent message to Kontagent.
- * 
- * @param {string} userId The UID of the sending user @param {string}
- * recipientUserIds A comma-separated list of the recipient UIDs @param {string}
- * uniqueTrackingTag 32-digit hex string used to match
- * NotificationSent->NotificationResponse->ApplicationAdded messages. See the
- * genUniqueTrackingTag() helper method. @param {object} [optionalParams] An
- * object containing paramName => value @param {string}
- * [optionalParams.subtype1] Subtype1 value (max 32 chars) @param {string}
- * [optionalParams.subtype2] Subtype2 value (max 32 chars) @param {string}
- * [optionalParams.subtype3] Subtype3 value (max 32 chars) @param {function}
- * [successCallback] The callback function to execute once message has been sent
- * successfully @param {function(error)} [validationErrorCallback] The callback
- * function to execute on validation failure
- */
+* Sends an Notification Sent message to Kontagent.
+*
+* @param {string} userId The UID of the sending user
+* @param {string} recipientUserIds A comma-separated list of the recipient UIDs
+* @param {string} uniqueTrackingTag 32-digit hex string used to match 
+*	NotificationSent->NotificationResponse->ApplicationAdded messages. 
+*	See the genUniqueTrackingTag() helper method.
+* @param {object} [optionalParams] An object containing paramName => value
+* @param {string} [optionalParams.subtype1] Subtype1 value (max 32 chars)
+* @param {string} [optionalParams.subtype2] Subtype2 value (max 32 chars)
+* @param {string} [optionalParams.subtype3] Subtype3 value (max 32 chars)
+* @param {function} [successCallback] The callback function to execute once message has been sent successfully
+* @param {function(error)} [validationErrorCallback] The callback function to execute on validation failure
+*/
 KontagentApi.prototype.trackNotificationSent = function(userId, recipientUserIds, uniqueTrackingTag, optionalParams, successCallback, validationErrorCallback) {
 	var apiParams = {
 		s : userId,
@@ -541,24 +590,23 @@ KontagentApi.prototype.trackNotificationSent = function(userId, recipientUserIds
 		if (optionalParams.subtype3) { apiParams.st3 = optionalParams.subtype3; }
 	}
 	
-	this._sendMessageViaImgTag("nts", apiParams, successCalback, validationErrorCallback);
+	this._sendMessage("nts", apiParams, successCalback, validationErrorCallback);
 }
 
 /*
- * Sends an Notification Response message to Kontagent.
- * 
- * @param {string} uniqueTrackingTag 32-digit hex string used to match
- * NotificationSent->NotificationResponse->ApplicationAdded messages. See the
- * genUniqueTrackingTag() helper method. @param {object} [optionalParams] An
- * object containing paramName => value @param {string}
- * [optionalParams.recipientUserId] The UID of the responding user @param
- * {string} [optionalParams.subtype1] Subtype1 value (max 32 chars) @param
- * {string} [optionalParams.subtype2] Subtype2 value (max 32 chars) @param
- * {string} [optionalParams.subtype3] Subtype3 value (max 32 chars) @param
- * {function} [successCallback] The callback function to execute once message
- * has been sent successfully @param {function(error)} [validationErrorCallback]
- * The callback function to execute on validation failure
- */
+* Sends an Notification Response message to Kontagent.
+*
+* @param {string} uniqueTrackingTag 32-digit hex string used to match 
+*	NotificationSent->NotificationResponse->ApplicationAdded messages. 
+*	See the genUniqueTrackingTag() helper method.
+* @param {object} [optionalParams] An object containing paramName => value
+* @param {string} [optionalParams.recipientUserId] The UID of the responding user
+* @param {string} [optionalParams.subtype1] Subtype1 value (max 32 chars)
+* @param {string} [optionalParams.subtype2] Subtype2 value (max 32 chars)
+* @param {string} [optionalParams.subtype3] Subtype3 value (max 32 chars)
+* @param {function} [successCallback] The callback function to execute once message has been sent successfully
+* @param {function(error)} [validationErrorCallback] The callback function to execute on validation failure
+*/
 KontagentApi.prototype.trackNotificationResponse = function(uniqueTrackingTag, optionalParams, successCallback, validationErrorCallback) {
 	var apiParams = {
 		i : 0,
@@ -572,25 +620,24 @@ KontagentApi.prototype.trackNotificationResponse = function(uniqueTrackingTag, o
 		if (optionalParams.subtype3) { apiParams.st3 = optionalParams.subtype3; }
 	}
 	
-	this._sendMessageViaImgTag("ntr", apiParams, successCallback, validationErrorCallback);
+	this._sendMessage("ntr", apiParams, successCallback, validationErrorCallback);
 }
 
 /*
- * Sends an Notification Email Sent message to Kontagent.
- * 
- * @param {string} userId The UID of the sending user @param {string}
- * recipientUserIds A comma-separated list of the recipient UIDs @param {string}
- * uniqueTrackingTag 32-digit hex string used to match
- * NotificationEmailSent->NotificationEmailResponse->ApplicationAdded messages.
- * See the genUniqueTrackingTag() helper method. @param {object}
- * [optionalParams] An object containing paramName => value @param {string}
- * [optionalParams.subtype1] Subtype1 value (max 32 chars) @param {string}
- * [optionalParams.subtype2] Subtype2 value (max 32 chars) @param {string}
- * [optionalParams.subtype3] Subtype3 value (max 32 chars) @param {function}
- * [successCallback] The callback function to execute once message has been sent
- * successfully @param {function(error)} [validationErrorCallback] The callback
- * function to execute on validation failure
- */
+* Sends an Notification Email Sent message to Kontagent.
+*
+* @param {string} userId The UID of the sending user
+* @param {string} recipientUserIds A comma-separated list of the recipient UIDs
+* @param {string} uniqueTrackingTag 32-digit hex string used to match 
+*	NotificationEmailSent->NotificationEmailResponse->ApplicationAdded messages. 
+*	See the genUniqueTrackingTag() helper method.
+* @param {object} [optionalParams] An object containing paramName => value
+* @param {string} [optionalParams.subtype1] Subtype1 value (max 32 chars)
+* @param {string} [optionalParams.subtype2] Subtype2 value (max 32 chars)
+* @param {string} [optionalParams.subtype3] Subtype3 value (max 32 chars)
+* @param {function} [successCallback] The callback function to execute once message has been sent successfully
+* @param {function(error)} [validationErrorCallback] The callback function to execute on validation failure
+*/
 KontagentApi.prototype.trackNotificationEmailSent = function(userId, recipientUserIds, uniqueTrackingTag, optionalParams, successCallback, validationErrorCallback) {
 	var apiParams = {
 		s : userId,
@@ -604,25 +651,24 @@ KontagentApi.prototype.trackNotificationEmailSent = function(userId, recipientUs
 		if (optionalParams.subtype3) { apiParams.st3 = optionalParams.subtype3; }
 	}
 
-	this._sendMessageViaImgTag("nes", apiParams, successCallback, validationErrorCallback);
+	this._sendMessage("nes", apiParams, successCallback, validationErrorCallback);
 }
 
 /*
- * Sends an Notification Email Response message to Kontagent.
- * 
- * 
- * @param {string} uniqueTrackingTag 32-digit hex string used to match
- * NotificationEmailSent->NotificationEmailResponse->ApplicationAdded messages.
- * See the genUniqueTrackingTag() helper method. @param {object}
- * [optionalParams] An object containing paramName => value @param {string}
- * [optionalParams.recipientUserId] The UID of the responding user @param
- * {string} [optionalParams.subtype1] Subtype1 value (max 32 chars) @param
- * {string} [optionalParams.subtype2] Subtype2 value (max 32 chars) @param
- * {string} [optionalParams.subtype3] Subtype3 value (max 32 chars) @param
- * {function} [successCallback] The callback function to execute once message
- * has been sent successfully @param {function(error)} [validationErrorCallback]
- * The callback function to execute on validation failure
- */
+* Sends an Notification Email Response message to Kontagent.
+*
+
+* @param {string} uniqueTrackingTag 32-digit hex string used to match 
+*	NotificationEmailSent->NotificationEmailResponse->ApplicationAdded messages. 
+*	See the genUniqueTrackingTag() helper method.
+* @param {object} [optionalParams] An object containing paramName => value
+* @param {string} [optionalParams.recipientUserId] The UID of the responding user
+* @param {string} [optionalParams.subtype1] Subtype1 value (max 32 chars)
+* @param {string} [optionalParams.subtype2] Subtype2 value (max 32 chars)
+* @param {string} [optionalParams.subtype3] Subtype3 value (max 32 chars)
+* @param {function} [successCallback] The callback function to execute once message has been sent successfully
+* @param {function(error)} [validationErrorCallback] The callback function to execute on validation failure
+*/
 KontagentApi.prototype.trackNotificationEmailResponse = function(uniqueTrackingTag, optionalParams, successCallback, validationErrorCallback) {
 	var apiParams = {
 		i : 0,
@@ -636,26 +682,25 @@ KontagentApi.prototype.trackNotificationEmailResponse = function(uniqueTrackingT
 		if (optionalParams.subtype3) { apiParams.st3 = optionalParams.subtype3; }
 	}
 	
-	this._sendMessageViaImgTag("nei", apiParams, successCallback, validationErrorCallback);
+	this._sendMessage("nei", apiParams, successCallback, validationErrorCallback);
 }
 
 /*
- * Sends an Stream Post message to Kontagent.
- * 
- * @param {string} userId The UID of the sending user @param {string}
- * uniqueTrackingTag 32-digit hex string used to match
- * NotificationEmailSent->NotificationEmailResponse->ApplicationAdded messages.
- * See the genUniqueTrackingTag() helper method. @param {string} type The
- * Facebook channel type (feedpub, stream, feedstory, multifeedstory,
- * dashboard_activity, or dashboard_globalnews). @param {object}
- * [optionalParams] An object containing paramName => value @param {string}
- * [optionalParams.subtype1] Subtype1 value (max 32 chars) @param {string}
- * [optionalParams.subtype2] Subtype2 value (max 32 chars) @param {string}
- * [optionalParams.subtype3] Subtype3 value (max 32 chars) @param {function}
- * [successCallback] The callback function to execute once message has been sent
- * successfully @param {function(error)} [validationErrorCallback] The callback
- * function to execute on validation failure
- */
+* Sends an Stream Post message to Kontagent.
+*
+* @param {string} userId The UID of the sending user
+* @param {string} uniqueTrackingTag 32-digit hex string used to match 
+*	NotificationEmailSent->NotificationEmailResponse->ApplicationAdded messages. 
+*	See the genUniqueTrackingTag() helper method.
+* @param {string} type The Facebook channel type
+*	(feedpub, stream, feedstory, multifeedstory, dashboard_activity, or dashboard_globalnews).
+* @param {object} [optionalParams] An object containing paramName => value
+* @param {string} [optionalParams.subtype1] Subtype1 value (max 32 chars)
+* @param {string} [optionalParams.subtype2] Subtype2 value (max 32 chars)
+* @param {string} [optionalParams.subtype3] Subtype3 value (max 32 chars)
+* @param {function} [successCallback] The callback function to execute once message has been sent successfully
+* @param {function(error)} [validationErrorCallback] The callback function to execute on validation failure
+*/
 KontagentApi.prototype.trackStreamPost = function(userId, uniqueTrackingTag, type, optionalParams, successCallback, validationErrorCallback) {
 	var apiParams = {
 		s : userId,
@@ -669,26 +714,25 @@ KontagentApi.prototype.trackStreamPost = function(userId, uniqueTrackingTag, typ
 		if (optionalParams.subtype3) { apiParams.st3 = optionalParams.subtype3; }
 	}
 
-	this._sendMessageViaImgTag("pst", apiParams, successCallback, validationErrorCallback);
+	this._sendMessage("pst", apiParams, successCallback, validationErrorCallback);
 }
 
 /*
- * Sends an Stream Post Response message to Kontagent.
- * 
- * @param {string} uniqueTrackingTag 32-digit hex string used to match
- * NotificationEmailSent->NotificationEmailResponse->ApplicationAdded messages.
- * See the genUniqueTrackingTag() helper method. @param {string} type The
- * Facebook channel type (feedpub, stream, feedstory, multifeedstory,
- * dashboard_activity, or dashboard_globalnews). @param {object}
- * [optionalParams] An object containing paramName => value @param {string}
- * [optionalParams.recipientUserId] The UID of the responding user @param
- * {string} [optionalParams.subtype1] Subtype1 value (max 32 chars) @param
- * {string} [optionalParams.subtype2] Subtype2 value (max 32 chars) @param
- * {string} [optionalParams.subtype3] Subtype3 value (max 32 chars) @param
- * {function} [successCallback] The callback function to execute once message
- * has been sent successfully @param {function(error)} [validationErrorCallback]
- * The callback function to execute on validation failure
- */
+* Sends an Stream Post Response message to Kontagent.
+*
+* @param {string} uniqueTrackingTag 32-digit hex string used to match 
+*	NotificationEmailSent->NotificationEmailResponse->ApplicationAdded messages. 
+*	See the genUniqueTrackingTag() helper method.
+* @param {string} type The Facebook channel type
+*	(feedpub, stream, feedstory, multifeedstory, dashboard_activity, or dashboard_globalnews).
+* @param {object} [optionalParams] An object containing paramName => value
+* @param {string} [optionalParams.recipientUserId] The UID of the responding user
+* @param {string} [optionalParams.subtype1] Subtype1 value (max 32 chars)
+* @param {string} [optionalParams.subtype2] Subtype2 value (max 32 chars)
+* @param {string} [optionalParams.subtype3] Subtype3 value (max 32 chars)
+* @param {function} [successCallback] The callback function to execute once message has been sent successfully
+* @param {function(error)} [validationErrorCallback] The callback function to execute on validation failure
+*/
 KontagentApi.prototype.trackStreamPostResponse = function(uniqueTrackingTag, type, optionalParams, successCallback, validationErrorCallback) {
 	var apiParams = {
 		i : 0,
@@ -703,24 +747,23 @@ KontagentApi.prototype.trackStreamPostResponse = function(uniqueTrackingTag, typ
 		if (optionalParams.subtype3) { apiParams.st3 = optionalParams.subtype3; }
 	}
 
-	this._sendMessageViaImgTag("psr", apiParams, successCallback, validationErrorCallback);
+	this._sendMessage("psr", apiParams, successCallback, validationErrorCallback);
 }
 
 /*
- * Sends an Custom Event message to Kontagent.
- * 
- * @param {string} userId The UID of the user @param {string} eventName The name
- * of the event @param {object} [optionalParams] An object containing paramName =>
- * value @param {int} [optionalParams.value] A value associated with the event
- * @param {int} [optionalParams.level] A level associated with the event (must
- * be positive) @param {string} [optionalParams.subtype1] Subtype1 value (max 32
- * chars) @param {string} [optionalParams.subtype2] Subtype2 value (max 32
- * chars) @param {string} [optionalParams.subtype3] Subtype3 value (max 32
- * chars) @param {function} [successCallback] The callback function to execute
- * once message has been sent successfully @param {function(error)}
- * [validationErrorCallback] The callback function to execute on validation
- * failure
- */
+* Sends an Custom Event message to Kontagent.
+*
+* @param {string} userId The UID of the user
+* @param {string} eventName The name of the event
+* @param {object} [optionalParams] An object containing paramName => value
+* @param {int} [optionalParams.value] A value associated with the event
+* @param {int} [optionalParams.level] A level associated with the event (must be positive)
+* @param {string} [optionalParams.subtype1] Subtype1 value (max 32 chars)
+* @param {string} [optionalParams.subtype2] Subtype2 value (max 32 chars)
+* @param {string} [optionalParams.subtype3] Subtype3 value (max 32 chars)
+* @param {function} [successCallback] The callback function to execute once message has been sent successfully
+* @param {function(error)} [validationErrorCallback] The callback function to execute on validation failure
+*/
 KontagentApi.prototype.trackEvent = function(userId, eventName, optionalParams, successCallback, validationErrorCallback) {
 	var apiParams = {
 		s : userId,
@@ -735,24 +778,23 @@ KontagentApi.prototype.trackEvent = function(userId, eventName, optionalParams, 
 		if (optionalParams.subtype3) { apiParams.st3 = optionalParams.subtype3; }
 	}	
 
-	this._sendMessageViaImgTag("evt", apiParams, successCallback, validationErrorCallback);
+	this._sendMessage("evt", apiParams, successCallback, validationErrorCallback);
 }
 
 /*
- * Sends an Application Added message to Kontagent.
- * 
- * @param {string} userId The UID of the installing user @param {object}
- * [optionalParams] An object containing paramName => value @param {string}
- * [optionalParams.uniqueTrackingTag] 16-digit hex string used to match
- * Invite/StreamPost/NotificationSent/NotificationEmailSent->ApplicationAdded
- * messages. See the genUniqueTrackingTag() helper method. @param {string}
- * [optionalParams.shortUniqueTrackingTag] 8-digit hex string used to match
- * ThirdPartyCommClicks->ApplicationAdded messages. See the
- * genShortUniqueTrackingTag() helper method. @param {function}
- * [successCallback] The callback function to execute once message has been sent
- * successfully @param {function(error)} [validationErrorCallback] The callback
- * function to execute on validation failure
- */
+* Sends an Application Added message to Kontagent.
+*
+* @param {string} userId The UID of the installing user
+* @param {object} [optionalParams] An object containing paramName => value
+* @param {string} [optionalParams.uniqueTrackingTag] 16-digit hex string used to match 
+*	Invite/StreamPost/NotificationSent/NotificationEmailSent->ApplicationAdded messages. 
+*	See the genUniqueTrackingTag() helper method.
+* @param {string} [optionalParams.shortUniqueTrackingTag] 8-digit hex string used to match 
+*	ThirdPartyCommClicks->ApplicationAdded messages. 
+*	See the genShortUniqueTrackingTag() hesendMessagelper method.
+* @param {function} [successCallback] The callback function to execute once message has been sent successfully
+* @param {function(error)} [validationErrorCallback] The callback function to execute on validation failure
+*/
 KontagentApi.prototype.trackApplicationAdded = function(userId, optionalParams, successCallback, validationErrorCallback) {
 	var apiParams = {s : userId};
 	
@@ -761,38 +803,36 @@ KontagentApi.prototype.trackApplicationAdded = function(userId, optionalParams, 
 		if (optionalParams.shortUniqueTrackingTag) { apiParams.su = optionalParams.shortUniqueTrackingTag; }
 	}
 
-	this._sendMessageViaImgTag("apa", apiParams, successCallback, validationErrorCallback);
+	this._sendMessage("apa", apiParams, successCallback, validationErrorCallback);
 }
 
 /*
- * Sends an Application Removed message to Kontagent.
- * 
- * @param {string} userId The UID of the removing user @param {function}
- * [successCallback] The callback function to execute once message has been sent
- * successfully @param {function(error)} [validationErrorCallback] The callback
- * function to execute on validation failure
- */
+* Sends an Application Removed message to Kontagent.
+*
+* @param {string} userId The UID of the removing user
+* @param {function} [successCallback] The callback function to execute once message has been sent successfully
+* @param {function(error)} [validationErrorCallback] The callback function to execute on validation failure
+*/
 KontagentApi.prototype.trackApplicationRemoved = function(userId, successCallback, validationErrorCallback) {
 	var apiParams = {s : userId};
 	
-	this._sendMessageViaImgTag("apr", apiParams, successCallback, validationErrorCallback);
+	this._sendMessage("apr", apiParams, successCallback, validationErrorCallback);
 }
 
 /*
- * Sends an Third Party Communication Click message to Kontagent.
- * 
- * @param {string} type The third party comm click type (ad, partner). @param
- * {string} shortUniqueTrackingTag 8-digit hex string used to match
- * ThirdPartyCommClicks->ApplicationAdded messages. @param {object}
- * [optionalParams] An object containing paramName => value @param {string}
- * [optionalParams.userId] The UID of the user @param {string}
- * [optionalParams.subtype1] Subtype1 value (max 32 chars) @param {string}
- * [optionalParams.subtype2] Subtype2 value (max 32 chars) @param {string}
- * [optionalParams.subtype3] Subtype3 value (max 32 chars) @param {function}
- * [successCallback] The callback function to execute once message has been sent
- * successfully @param {function(error)} [validationErrorCallback] The callback
- * function to execute on validation failure
- */
+* Sends an Third Party Communication Click message to Kontagent.
+*
+* @param {string} type The third party comm click type (ad, partner).
+* @param {string} shortUniqueTrackingTag 8-digit hex string used to match 
+*	ThirdPartyCommClicks->ApplicationAdded messages. 
+* @param {object} [optionalParams] An object containing paramName => value
+* @param {string} [optionalParams.userId] The UID of the user
+* @param {string} [optionalParams.subtype1] Subtype1 value (max 32 chars)
+* @param {string} [optionalParams.subtype2] Subtype2 value (max 32 chars)
+* @param {string} [optionalParams.subtype3] Subtype3 value (max 32 chars)
+* @param {function} [successCallback] The callback function to execute once message has been sent successfully
+* @param {function(error)} [validationErrorCallback] The callback function to execute on validation failure
+*/
 KontagentApi.prototype.trackThirdPartyCommClick = function(type, shortUniqueTrackingTag, optionalParams, successCallback, validationErrorCallback) {
 	var apiParams = {
 		i : 0,
@@ -807,24 +847,22 @@ KontagentApi.prototype.trackThirdPartyCommClick = function(type, shortUniqueTrac
 		if (optionalParams.subtype3) { apiParams.st3 = optionalParams.subtype3; }
 	}	
 	
-	this._sendMessageViaImgTag("ucc", apiParams, successCallback, validationErrorCallback);
+	this._sendMessage("ucc", apiParams, successCallback, validationErrorCallback);
 }
 
 /*
- * Sends an Page Request message to Kontagent.
- * 
- * @param {string} userId The UID of the user @param {object} [optionalParams]
- * An object containing paramName => value @param {string}
- * [optionalParams.ipAddress] The current users IP address @param {string}
- * [optionalParams.pageAddress] The current page address (ex: index.html) @param
- * {function} [successCallback] The callback function to execute once message
- * has been sent successfully @param {function(error)} [validationErrorCallback]
- * The callback function to execute on validation failure
- */
+* Sends an Page Request message to Kontagent.
+*
+* @param {string} userId The UID of the user
+* @param {object} [optionalParams] An object containing paramName => value
+* @param {string} [optionalParams.ipAddress] The current users IP address
+* @param {string} [optionalParams.pageAddress] The current page address (ex: index.html)
+* @param {function} [successCallback] The callback function to execute once message has been sent successfully
+* @param {function(error)} [validationErrorCallback] The callback function to execute on validation failure
+*/
 KontagentApi.prototype.trackPageRequest = function(userId, optionalParams, successCallback, validationErrorCallback) {
 	var apiParams = {
-		s : userId,
-		ts : Math.round(new Date().getTime() / 1000)
+		s : userId
 	};
 	
 	if (optionalParams != null && typeof optionalParams != 'undefined') {
@@ -832,22 +870,21 @@ KontagentApi.prototype.trackPageRequest = function(userId, optionalParams, succe
 		if (optionalParams.pageAddress) { apiParams.u = optionalParams.pageAddress; }
 	}
 
-	this._sendMessageViaImgTag("pgr", apiParams, successCallback, validationErrorCallback);
+	this._sendMessage("pgr", apiParams, successCallback, validationErrorCallback);
 }
 
 /*
- * Sends an User Information message to Kontagent.
- * 
- * @param {string} userId The UID of the user @param {object} [optionalParams]
- * An object containing paramName => value @param {int}
- * [optionalParams.birthYear] The birth year of the user @param {string}
- * [optionalParams.gender] The gender of the user (m,f,u) @param {string}
- * [optionalParams.country] The 2-character country code of the user @param
- * {int} [optionalParams.friendCount] The friend count of the user @param
- * {function} [successCallback] The callback function to execute once message
- * has been sent successfully @param {function(error)} [validationErrorCallback]
- * The callback function to execute on validation failure
- */
+* Sends an User Information message to Kontagent.
+*
+* @param {string} userId The UID of the user
+* @param {object} [optionalParams] An object containing paramName => value
+* @param {int} [optionalParams.birthYear] The birth year of the user
+* @param {string} [optionalParams.gender] The gender of the user (m,f,u)
+* @param {string} [optionalParams.country] The 2-character country code of the user
+* @param {int} [optionalParams.friendCount] The friend count of the user
+* @param {function} [successCallback] The callback function to execute once message has been sent successfully
+* @param {function(error)} [validationErrorCallback] The callback function to execute on validation failure
+*/
 KontagentApi.prototype.trackUserInformation = function (userId, optionalParams, successCallback, validationErrorCallback) {
 	var apiParams = {s : userId};
 	
@@ -858,23 +895,21 @@ KontagentApi.prototype.trackUserInformation = function (userId, optionalParams, 
 		if (optionalParams.friendCount) { apiParams.f = optionalParams.friendCount; }
 	}
 	
-	this._sendMessageViaImgTag("cpu", apiParams, successCallback, validationErrorCallback);
+	this._sendMessage("cpu", apiParams, successCallback, validationErrorCallback);
 }
 
 /*
- * Sends an Goal Count message to Kontagent.
- * 
- * @param {string} userId The UID of the user @param {object} [optionalParams]
- * An object containing paramName => value @param {int}
- * [optionalParams.goalCount1] The amount to increment goal count 1 by @param
- * {int} [optionalParams.goalCount2] The amount to increment goal count 2 by
- * @param {int} [optionalParams.goalCount3] The amount to increment goal count 3
- * by @param {int} [optionalParams.goalCount4] The amount to increment goal
- * count 4 by @param {function} [successCallback] The callback function to
- * execute once message has been sent successfully @param {function(error)}
- * [validationErrorCallback] The callback function to execute on validation
- * failure
- */
+* Sends an Goal Count message to Kontagent.
+*
+* @param {string} userId The UID of the user
+* @param {object} [optionalParams] An object containing paramName => value
+* @param {int} [optionalParams.goalCount1] The amount to increment goal count 1 by
+* @param {int} [optionalParams.goalCount2] The amount to increment goal count 2 by
+* @param {int} [optionalParams.goalCount3] The amount to increment goal count 3 by
+* @param {int} [optionalParams.goalCount4] The amount to increment goal count 4 by
+* @param {function} [successCallback] The callback function to execute once message has been sent successfully
+* @param {function(error)} [validationErrorCallback] The callback function to execute on validation failure
+*/
 KontagentApi.prototype.trackGoalCount = function(userId, optionalParams, successCallback, validationErrorCallback) {
 	var apiParams = {s : userId};
 	
@@ -885,23 +920,22 @@ KontagentApi.prototype.trackGoalCount = function(userId, optionalParams, success
 		if (optionalParams.goalCount4) { apiParams.gc4 = optionalParams.goalCount4; }
 	}
 
-	this._sendMessageViaImgTag("gci", apiParams, successCallback, validationErrorCallback);
+	this._sendMessage("gci", apiParams, successCallback, validationErrorCallback);
 }
 
 /*
- * Sends an Revenue message to Kontagent.
- * 
- * @param {string} userId The UID of the user @param {int} value The amount of
- * revenue in cents @param {object} [optionalParams] An object containing
- * paramName => value @param {string} [optionalParams.type] The transaction type
- * (direct, indirect, advertisement, credits, other) @param {string}
- * [optionalParams.subtype1] Subtype1 value (max 32 chars) @param {string}
- * [optionalParams.subtype2] Subtype2 value (max 32 chars) @param {string}
- * [optionalParams.subtype3] Subtype3 value (max 32 chars) @param {function}
- * [successCallback] The callback function to execute once message has been sent
- * successfully @param {function(error)} [validationErrorCallback] The callback
- * function to execute on validation failure
- */
+* Sends an Revenue message to Kontagent.
+*
+* @param {string} userId The UID of the user
+* @param {int} value The amount of revenue in cents
+* @param {object} [optionalParams] An object containing paramName => value
+* @param {string} [optionalParams.type] The transaction type (direct, indirect, advertisement, credits, other)
+* @param {string} [optionalParams.subtype1] Subtype1 value (max 32 chars)
+* @param {string} [optionalParams.subtype2] Subtype2 value (max 32 chars)
+* @param {string} [optionalParams.subtype3] Subtype3 value (max 32 chars)
+* @param {function} [successCallback] The callback function to execute once message has been sent successfully
+* @param {function(error)} [validationErrorCallback] The callback function to execute on validation failure
+*/
 KontagentApi.prototype.trackRevenue = function(userId, value, optionalParams, successCallback, validationErrorCallback) {
 	var apiParams = {
 		s : userId,
@@ -915,31 +949,30 @@ KontagentApi.prototype.trackRevenue = function(userId, value, optionalParams, su
 		if (optionalParams.subtype3) { apiParams.st3 = optionalParams.subtype3; }
 	}
 
-	this._sendMessageViaImgTag("mtu", apiParams, successCallback, validationErrorCallback);
+	this._sendMessage("mtu", apiParams, successCallback, validationErrorCallback);
 }
 
-// //////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 /*
- * Helper class to validate the paramters for the Kontagent API messages. All
- * methods are static so no need to instantiate this class.
- * 
- * @constructor
- */
+* Helper class to validate the paramters for the Kontagent API messages. All 
+* 	methods are static so no need to instantiate this class.
+*
+* @constructor
+*/
 function KtValidator() {
 }
 
 /*
- * Validates a parameter of a given message type. IMPORTANT: When evaluating the
- * return, use a strict-type comparison: if(response === true) {}
- * 
- * @param {string} messageType The message type that the param belongs to (ex:
- * ins, apa, etc.) @param {string} paramName The name of the parameter (ex: s,
- * su, u, etc.) @param {mixed} paramValue The value of the parameter
- * 
- * @returns {mixed} Returns true on success and an error message string on
- * failure.
- */
+* Validates a parameter of a given message type.
+* IMPORTANT: When evaluating the return, use a strict-type comparison: if(response === true) {}
+*
+* @param {string} messageType The message type that the param belongs to (ex: ins, apa, etc.)
+* @param {string} paramName The name of the parameter (ex: s, su, u, etc.)
+* @param {mixed} paramValue The value of the parameter
+*
+* @returns {mixed} Returns true on success and an error message string on failure.
+*/
 KtValidator.validateParameter = function(messageType, paramName, paramValue) {
 	return KtValidator['_validate' + KtValidator._upperCaseFirst(paramName)](messageType, paramName, paramValue);
 }
@@ -1067,7 +1100,6 @@ KtValidator._validateN = function(messageType, paramName, paramValue) {
 		return true;
 	}
 }
-
 
 KtValidator._validateR = function(messageType, paramName, paramValue) {
 	// Sending messages include multiple recipients (comma separated) and

@@ -18,7 +18,7 @@ To get started, make sure you've included and instantiated the libraries. You MU
         
         $ktFacebook = new KontagentFacebook(array(
             'appId'  => '',
-            'secret' => '',
+            'secret' => ''
         ));
     ?>
 
@@ -31,7 +31,7 @@ To get started, make sure you've included and instantiated the libraries. You MU
             <script src="http://connect.facebook.net/en_US/all.js"></script>
             <script src="./kontagent/kontagent_facebook.js"></script>
             <script>
-                KT_FB.init({
+                FB.init({
                     appId  : '',
                     status : true, // check login status
                     cookie : true, // enable cookies to allow the server to access the session
@@ -54,7 +54,7 @@ In PHP, simply redirect them to the login page:
 
 Or in JavaScript:
 
-    KT_FB.login(function(response) {
+    FB.login(function(response) {
         console.log(response);
     }, {scope: 'email, user_birthday'});
 
@@ -75,7 +75,7 @@ In PHP, simply redirect them to:
 
 Or in JavaScript:
 
-    KT_FB.ui(
+    FB.ui(
         {
             "method": "apprequests", 
             "message": "You should learn more about this awesome game.", 
@@ -103,7 +103,7 @@ In PHP, simply redirect them to:
 
 Or in JavaScript:
 
-    KT_FB.ui(
+    FB.ui(
         {
             "method": "feed", 
             "link": "http://yourapp.facebook.com", 
@@ -126,7 +126,7 @@ In PHP:
 
 Or in JavaScript:
 
-    KT_FB.getKontagentApi();
+    FB.getKontagentApi();
 
 
 

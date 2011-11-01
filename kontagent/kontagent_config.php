@@ -1,7 +1,7 @@
 <?php
 	// The API key of your Kontagent application. This can be found by logging into
 	// the Kontagent Dashboard. Note that this is NOT the same as your Facebook AppId.
-	define("KT_API_KEY", "cb9e4a66105f441eb68f435bcd795489");
+	define("KT_API_KEY", "");
 	
 	// Whether to send the tracking messages to Kontagent's Test Servers. If this is set to
 	// true, data will not be processed to your dashboard. Use this for debugging purposes.

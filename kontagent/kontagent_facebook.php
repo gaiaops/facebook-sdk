@@ -105,7 +105,7 @@ class KontagentFacebook extends Facebook
 	
 		// append tracking variables to link 
 		// TODO: append these variables to ALL possible links (properties, actions - see: http://developers.facebook.com/docs/reference/dialogs/feed/)
-		if ($params['link']) {
+		if (isset($params['link'])) {
 			$params['link'] = $this->appendKtVarsToUrl(
 				$params['link'],
 				array(
@@ -117,7 +117,24 @@ class KontagentFacebook extends Facebook
 				)
 			);
 		}
-	
+
+		if (isset($params['actions'])) {
+			for($i=0; $i<sizeof($params['actions']); $i++) {
+				if (isset($params['actions'][$i]['link'])) {
+					$params['actions'][$i]['link'] = $this->appendKtVarsToUrl(
+						$params['actions'][$i]['link'],
+						array(
+							'kt_track_psr' => 1,
+							'kt_u' =>  $uniqueTrackingTag,
+							'kt_st1' => (isset($params['subtype1'])) ? $params['subtype1'] : null,
+							'kt_st2' => (isset($params['subtype2'])) ? $params['subtype2'] : null,
+							'kt_st3' => (isset($params['subtype3'])) ? $params['subtype3'] : null
+						)
+					);
+				}
+			}
+		}
+
 		return $this->getUrl( 
 			'www',
 			'dialog/feed',
@@ -202,8 +219,7 @@ class KontagentFacebook extends Facebook
 			)
 		);
 		
-		// append tracking variables to link 
-		// TODO: append these variables to ALL possible links (properties, actions - see: http://developers.facebook.com/docs/reference/dialogs/feed/)
+		// append Kontagent tracking parameters to the data field
 		$params['data'] = $this->appendKtVarsToDataField(
 			isset($params['data']) ? $params['data'] : '',
 			array(
@@ -308,7 +324,7 @@ class KontagentFacebook extends Facebook
 				echo '<script>KT_GET["kt_u"] = "' . $_GET['kt_u'] . '";</script>';
 				
 				$this->ktApi->trackInviteResponse($ktDataVars['kt_u'], array(
-					'recipientUserId' => $requestId,
+					'recipientUserId' => $request['to']['id'],
 					'subtype1' => (isset($ktDataVars['kt_st1'])) ? $ktDataVars['kt_st1'] : null,
 					'subtype2' => (isset($ktDataVars['kt_st2'])) ? $ktDataVars['kt_st2'] : null,
 					'subtype3' => (isset($ktDataVars['kt_st3'])) ? $ktDataVars['kt_st3'] : null
@@ -321,7 +337,7 @@ class KontagentFacebook extends Facebook
 			// the code will looks for it when application added is generated.
 
 			// Note that generating this tag is outside the "if (!KT_SEND_CLIENT_SIDE)" because it is always
-			// generated on the server side (otherwise there is no way to get the generated value back to PHP.
+			// generated on the server side (otherwise there is no way to get the generated value back to PHP.)
 			$_GET['kt_su'] = $this->ktApi->genShortUniqueTrackingTag();
 			echo '<script>KT_GET["kt_su"] = "' . $_GET['kt_su'] . '";</script>';
 		}
@@ -365,10 +381,20 @@ class KontagentFacebook extends Facebook
 					));
 				}
 				
-				if (isset($_GET['kt_track_ins']) && isset($_GET['request_ids']) && is_array($_GET['request_ids'])) {
+				if (isset($_GET['kt_track_ins'])) {
+					$recipientUserIds = '';
+				
+					if (isset($_GET['request_ids']) && is_array($_GET['request_ids'])) {
+						// Non-efficient Requests, we need to make an extra call to get the uids
+						$recipientUserIds = $this->getRecipientUserIdsFromRequestIds(implode(',', $_GET['request_ids']));
+					} else if (isset($_GET['request']) && isset($_GET['to']) && is_array($_GET['to'])) {
+						// Request 2.0 Efficient mode, we have direct access to recipient uids
+						$recipientUserIds = implode(',', $_GET['to']);
+					}
+					
 					$this->ktApi->trackInviteSent(
 						$this->getUser(),
-						implode(',', $_GET['request_ids']),
+						$recipientUserIds,
 						$_GET['kt_u'], 
 						array(
 							'subtype1' => (isset($_GET['kt_st1'])) ? $_GET['kt_st1'] : null,
@@ -537,6 +563,28 @@ class KontagentFacebook extends Facebook
 		} else {
 			return $string;
 		}
+	}
+	
+	private function removeTrailingComma($string)
+	{
+		if (substr($string, -1) == ',') {
+			return substr($string, 0, -1);
+		} else {
+			return $string;
+		}
+	}
+	
+	// Returns comma-separated recipient userIds given list of request Ids (comma separated)
+	private function getRecipientUserIdsFromRequestIds($requestIds) 
+	{
+		$recipientUserIds = '';
+		$requests = $this->api('/', array('ids'=>$requestIds));
+		
+		foreach($requests as $request) {
+			$recipientUserIds .= $request['to']['id'] . ',';
+		}
+			
+		return $this->removeTrailingComma($recipientUserIds);
 	}
 }
 
