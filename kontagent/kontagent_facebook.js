@@ -187,7 +187,7 @@ FB._trackLanding = function()
 							}
 						);
 					});
-				} else if (KT_GET['request'] && KT_GET['to'] && FB._isArray(GET['to'])) {
+				} else if (KT_GET['request'] && KT_GET['to'] && FB._isArray(KT_GET['to'])) {
 					// Request 2.0 Efficient mode, we have direct access to recipeint uids
 					FB._ktApi.trackInviteSent(
 						authResponse.userID, 
@@ -1034,6 +1034,7 @@ KtValidator._validateGc3 = function(messageType, paramName, paramValue) {
 
 KtValidator._validateGc4 = function(messageType, paramName, paramValue) {
 	return KtValidator._validateGc1(messageType, paramName, paramValue);
+
 }
 
 KtValidator._validateI = function(messageType, paramName, paramValue) {
