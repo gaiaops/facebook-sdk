@@ -23,7 +23,7 @@ FB.init = function(options)
 		"useTestServer": KT_USE_TEST_SERVER, 
 		"useHttps": (KT_USE_HTTPS == 'auto') ? FB._isHttps() : KT_USE_HTTPS
 	})
-	
+	is
 	// Perform the landing page tracking. The timeout/delay is neccessary
   // otherwise
 	// FB will throw an error if we start making API calls too quickly.
@@ -330,9 +330,9 @@ FB._isHttps = function()
 
 // Returns true of the variable is an array, false otherwise.
 FB._isArray = function(variable) {
-	if (!KT_GET['request_ids']) {
+	if (!variable) {
 		return false;
-	} else if (KT_GET['request_ids'] instanceof Array) {
+	} else if (variable instanceof Array) {
 		return true;
 	} else {
 		return false;
