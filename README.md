@@ -20,6 +20,14 @@ To get started, make sure you've included and instantiated the libraries. You MU
             'appId'  => '',
             'secret' => ''
         ));
+        
+        // with the patch from gaiaops, you can also do:
+        $facebook =  new Facebook(array(
+            'appId'  => '',
+            'secret' => ''
+        ));
+        $ktFacebook = new KontagentFacebook( $facebook );
+        
     ?>
 
     <html>
