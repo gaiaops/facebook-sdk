@@ -2,7 +2,7 @@
 
 // Kontagent's wrapper around Facebook's 3.0 SDK. Overrides methods to 
 // automatically send the appropriate tracking messages to Kontagent.
-class KontagentFacebook extends Facebook
+class KontagentFacebook
 {
 	// Reference to Kontagent's API wrapper object
 	public $ktApi = null;
@@ -25,12 +25,26 @@ class KontagentFacebook extends Facebook
 		'kt_type'
 	);
 	
-	public function __construct($config)
+	protected $facebook;
+	
+	
+	
+	public function __construct($facebook)
 	{
-		parent::__construct(array(
-			'appId' => $config['appId'], 
-			'secret' => $config['secret'])
-		);
+	    // backward compatibility. config passed in instead of the facebook object we want to wrap.
+        if( is_array( $facebook ) ) $facebook = new Facebook( $facebook );
+
+	    // should be of type \BaseFacebook, but i can't enforce it because you may be
+	    // passing in a wrapper object around the facebook object.
+	    // If facebook created an interface, then we could enforce that.
+	    // at very least i am gonna make sure it is an object and that it has the unique methods
+	    // we expect.
+	    if( ! is_object( $facebook ) || ! $facebook->getAppId() || ! $facebook->getApiSecret()) {
+	        trigger_error('passed non-object into KontagentFacebook. needs object of type BaseFacebook', E_USER_ERROR);
+	        exit;
+	    }
+	    
+	    $this->facebook = $facebook;
 		
 		// instantiate the Kontagent Api object
 		$this->ktApi = new KontagentApi(KT_API_KEY, array(
@@ -56,7 +70,7 @@ class KontagentFacebook extends Facebook
 	// to strip KT tracking variables.
 	protected function getCurrentUrl($stripKtVars = false) 
 	{
-		$currentUrl = parent::getCurrentUrl();
+		$currentUrl = $this->facebook->getCurrentUrl();
 		return ($stripKtVars) ? $this->stripKtVarsFromUrl($currentUrl) : $currentUrl;
 	}
 	
@@ -73,14 +87,15 @@ class KontagentFacebook extends Facebook
 			)
 		);
 		
-		return parent::getLoginUrl($params);
+		return $this->facebook->getLoginUrl($params);
+	
 	}
 	
 	// Returns the Logout url. This method takes in the parameters defined by Facebook
 	// (see FB documentation).
 	public function getLogoutUrl($params = array()) 
 	{			
-		return parent::getLogoutUrl(array_merge(
+		return $this->facebook->getLogoutUrl(array_merge(
 			array('next' => $this->getCurrentUrl(true)),
 			$params
 		));
@@ -586,6 +601,26 @@ class KontagentFacebook extends Facebook
 			
 		return $this->removeTrailingComma($recipientUserIds);
 	}
+	
+    public function __call( $method, $args ){
+        return call_user_func_array( array( $this->facebook, $method ), $args );
+    }
+    
+    public function __get( $key ){
+        return $this->facebook->$key;
+    }
+    
+    public function __set( $key, $value ){
+        return $this->facebook->$key = $value;
+    }
+    
+    public function __isset( $key ){
+        return isset( $this->facebook->$key );
+    }
+    
+    public function __unset( $key ){
+        unset( $this->facebook->$key );
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////	
@@ -1385,4 +1420,3 @@ class KtValidator
 		}
 	}
 }
-?>
