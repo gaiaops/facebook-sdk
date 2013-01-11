@@ -8,7 +8,7 @@ class KontagentFacebook
 	public $ktApi = null;
 	
 	// KT tracking variable names that are used to pass Kontagent values around.
-	private $ktVars = array(
+	private static $ktVars = array(
 		'kt_track_apa',
 		'kt_track_pst',
 		'kt_track_psr',
@@ -33,7 +33,7 @@ class KontagentFacebook
 	{
 	    // backward compatibility. config passed in instead of the facebook object we want to wrap.
         if( is_array( $facebook ) ) $facebook = new Facebook( $facebook );
-
+	
 	    // should be of type \BaseFacebook, but i can't enforce it because you may be
 	    // passing in a wrapper object around the facebook object.
 	    // If facebook created an interface, then we could enforce that.
@@ -41,8 +41,8 @@ class KontagentFacebook
 	    // we expect.
 	    if( ! is_object( $facebook ) || ! $facebook->getAppId() || ! $facebook->getApiSecret()) {
 	        trigger_error('passed non-object into KontagentFacebook. needs object of type BaseFacebook', E_USER_ERROR);
-	        exit;
-	    }
+	            exit;
+	        }
 	    
 	    $this->facebook = $facebook;
 		
@@ -271,7 +271,7 @@ class KontagentFacebook
 	
 	// Echos config and GET variables to JS so that they can be accessed
 	// by our JS library. 
-	private function outputVarsToJs()
+	public function outputVarsToJs()
 	{
 		echo '<script>';
 		echo 'var KT_API_KEY = "' . KT_API_KEY . '";';
@@ -299,6 +299,7 @@ class KontagentFacebook
 		echo 'var KT_GET = [];';
 
 		foreach($_GET as $key => $val) {
+		    $val = get_magic_quotes_gpc() ? stripslashes($val) : $val;
 			if (is_array($val)) {
 				echo 'KT_GET["' . $key . '"] = [];';
 
@@ -308,7 +309,11 @@ class KontagentFacebook
 			} else if (is_numeric($val)) {
 				echo 'KT_GET["' . $key . '"] = ' . $val . ';';
 			} else {
+			if (NULL === @json_decode($val)) {
 				echo 'KT_GET["' . $key . '"] = "' . $val . '";';
+            } else {
+                echo 'KT_GET["' . $key . '"] = ' . $val . ';';
+            }
 			}
 		}
 
@@ -339,7 +344,7 @@ class KontagentFacebook
 				echo '<script>KT_GET["kt_u"] = "' . $_GET['kt_u'] . '";</script>';
 				
 				$this->ktApi->trackInviteResponse($ktDataVars['kt_u'], array(
-					'recipientUserId' => $request['to']['id'],
+					'recipientUserId' => $requestId,
 					'subtype1' => (isset($ktDataVars['kt_st1'])) ? $ktDataVars['kt_st1'] : null,
 					'subtype2' => (isset($ktDataVars['kt_st2'])) ? $ktDataVars['kt_st2'] : null,
 					'subtype3' => (isset($ktDataVars['kt_st3'])) ? $ktDataVars['kt_st3'] : null
@@ -521,26 +526,13 @@ class KontagentFacebook
 	{
 		$parts = parse_url($url);
 		
-		if (empty($parts['query'])) {
+		if (! $parts || ! isset($parts['query']) || empty($parts['query'])) {
 			return $url;
 		}
 		
-		$vars = explode('&', $parts['query']);
-		$retainedVars = array();
-				
-		foreach ($vars as $var) {
-			list ($key, $val) = explode('=', $var);
-			
-			if (!in_array($key, $this->ktVars)) {
-				$retainedVars[] = $var;
-			}
-		}
-
-		$query = '';
-
-		if (!empty($retainedVars)) {
-			$query = '?' . implode($retainedVars, '&');
-		}
+		parse_str( $parts['query'], $vars );
+		foreach( array_intersect( array_keys( $vars ), self::$ktVars) as $k ) unset( $vars[ $k ] );
+		$query = rtrim( '?' . http_build_query( $vars ));
 		
 		$port = (isset($parts['port'])) ? ':' . $parts['port'] : '';
 		
@@ -550,25 +542,10 @@ class KontagentFacebook
 	// Takes in a URL and returns an associative array containing the KT tracking parameters.
 	private function extractKtVarsFromUrl($url)
 	{
-		$ktUrlVars = array();
-	
 		$parts = parse_url($url);
-		
-		if (empty($parts['query'])) {
-			return $ktUrlVars;
-		}
-		
-		$vars = explode('&', $parts['query']);
-		
-		foreach ($vars as $var) {
-			list ($key, $val) = explode('=', $var);
-			
-			if (in_array($key, $this->ktVars)) {
-				$ktUrlVars[$key] = $val;
-			}
-		}
-		
-		return $ktUrlVars;
+		if ( ! $parts || ! isset( $parts['query'] ) || empty($parts['query'])) return array();
+        parse_str( $parts['query'], $vars );
+        return $vars;
 	}
 
 	private function removeTrailingAmpersand($string)
